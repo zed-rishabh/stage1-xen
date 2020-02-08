@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -202,6 +203,15 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		}
 	}
 
+	ra := p.Manifest.Apps[0]
+	appEnv := composeEnvironment(ra.App.Environment)
+	appsPath := common.AppPath(p.Root, ra.Name)
+
+	if err := writeEnvFile(appsPath, appEnv); err != nil {
+		log.PrintE("can't write env", err)
+		return 254
+	}
+
 	args, env, err := getArgsEnv(p, flavor, debug, n)
 	if err != nil {
 		log.FatalE("cannot get environment", err)
@@ -221,7 +231,52 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		log.FatalE(fmt.Sprintf("failed to execute %q", args[0]), err)
 	}
 
+
 	return 0
+}
+
+// writeEnvFile creates an external-environment file under appDir
+// with entries from PodManifest.App.Environments
+func writeEnvFile(appDir string, environment types.Environment) error {
+	envFilePath := filepath.Join(appDir, "external-environment")
+	ef := bytes.Buffer{}
+
+	//If environment is nil, then empty file will be created
+	if environment != nil {
+		for _, env := range environment {
+			fmt.Fprintf(&ef, "export %s='%s'\n", env.Name, env.Value)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(envFilePath), 0755); err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(envFilePath, ef.Bytes(), 0644); err != nil {
+		return err
+	}
+	return nil
+}
+
+// composeEnvironment formats the environment into a slice of types.Environment.
+func composeEnvironment(env types.Environment) types.Environment {
+	var composed types.Environment
+	var defaultEnv = map[string]string{
+		"PATH":    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"SHELL":   "/bin/sh",
+		"USER":    "root",
+		"LOGNAME": "root",
+		"HOME":    "/root",
+	}
+
+	for dk, dv := range defaultEnv {
+		if _, exists := env.Get(dk); !exists {
+			composed = append(composed, types.EnvironmentVariable{Name:dk, Value:dv})
+		}
+	}
+
+	composed = append(composed, env...)
+	return composed
 }
 
 func main() {

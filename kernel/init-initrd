@@ -34,11 +34,14 @@ mkdir /mnt/rootfs/proc &>/dev/null
 mount -o bind /dev /mnt/rootfs/dev
 mount -o bind /sys /mnt/rootfs/sys
 mount -o bind /proc /mnt/rootfs/proc
+mount -t devpts -o gid=5,mode=0620,noexec,nosuid devpts /mnt/rootfs/dev/pts
+mount -t tmpfs -o nodev,nosuid,noexec shm /mnt/rootfs/dev/shm
 
 ip=`cat /proc/cmdline | grep -o '\bip=[^ ]*' | cut -d = -f 2`
 gw=`cat /proc/cmdline | grep -o '\bgw=[^ ]*' | cut -d = -f 2`
 route=`cat /proc/cmdline | grep -o '\broute=[^ ]*' | cut -d = -f 2`
 pvcalls=`cat /proc/cmdline | grep  'pvcalls=1'`
+dhcp=`cat /proc/cmdline | grep  'dhcp=1'`
 if test "$pvcalls"
 then
 		mkdir -p /mnt/rootfs/etc
@@ -67,7 +70,21 @@ then
 		mkdir -p /mnt/rootfs/etc
 		echo "nameserver 2001:4860:4860::8888" > /mnt/rootfs/etc/resolv.conf
 	fi
+elif test "$dhcp"
+then
+    ip link set dev lo up
+    ip link set dev eth0 up
+    udhcpc --interface=eth0 --script=/mnt/udhcpc_script.sh
 fi
+cp /mnt/cmdline /mnt/rootfs
+cp /mnt/launcher.sh /mnt/rootfs
+chmod +x /mnt/rootfs/launcher.sh
 cmd=`cat /mnt/cmdline`
 echo "Executing $cmd"
-eval chroot /mnt/rootfs $cmd
+source /mnt/environment
+source /mnt/external-environment
+
+echo "Executing /mnt/mount_disk.sh"
+/mnt/mount_disk.sh
+
+eval setsid -c chroot /mnt/rootfs /launcher.sh $cmd <> /dev/console 2>&1

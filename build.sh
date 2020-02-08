@@ -24,8 +24,8 @@ then
     exit 1
 fi
 
-execs="enter run stop"
-netplugins="main/ptp main/bridge main/macvlan main/ipvlan ipam/host-local ipam/dhcp meta/flannel meta/tuning"
+execs="enter run stop udhcpc_script.sh launcher.sh mount_disk.sh"
+netplugins="main/ptp main/bridge main/macvlan main/ipvlan ipam/host-local meta/flannel meta/tuning"
 
 # Clean the repo, but save the vendor area
 if [ "x${1:-}" != "x" ] && [ "clean" == "$1" ]; then
@@ -72,8 +72,8 @@ for i in $execs; do
 done
 
 # Build the kernel and initrd
-kernel/make-kernel
-cp kernel/out/kernel target/rootfs
+#kernel/make-kernel
+#cp kernel/out/kernel target/rootfs
 kernel/make-initrd
 cp kernel/out/initrd target/rootfs
 
@@ -86,16 +86,14 @@ fi
 # Build init
 cd init
 rm -rf vendor
-glide install -v
-cd ..
-go build -o target/rootfs/init init/init.go
+[ -f go.mod ] && go mod vendor || glide install -v
+go build -o ../target/rootfs/init init.go
 
 # Network plugins
-mkdir -p target/rootfs/usr/lib/rkt/plugins/net
-cd init
+mkdir -p ../target/rootfs/usr/lib/rkt/plugins/net
 for i in $netplugins
 do
-    go build ./vendor/github.com/containernetworking/cni/plugins/$i
+    go build github.com/containernetworking/cni/plugins/$i
     mv `echo $i | cut -d / -f 2` ../target/rootfs/usr/lib/rkt/plugins/net
 done
 cd ..
@@ -112,7 +110,7 @@ echo 1 > systemd-version
 cd ../..
 
 # Build actool
-go get github.com/appc/spec/actool
-go build -o ./aci/actool github.com/appc/spec/actool
+#go get github.com/appc/spec/actool
+#go build -o ./aci/actool github.com/appc/spec/actool
 
-./aci/actool build target stage1-xen.aci
+#./aci/actool build target stage1-xen.aci

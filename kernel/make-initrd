@@ -7,16 +7,19 @@ initrd=$outpath/initrd
 init=`pwd`/kernel/init-initrd
 rm -rf $tmpdir
 
+mkdir -p $outpath
 mkdir -p $tmpdir/bin
 mkdir -p $tmpdir/sbin
 mkdir -p $tmpdir/etc
 mkdir -p $tmpdir/dev
+mkdir -p $tmpdir/dev/pts
+mkdir -p $tmpdir/dev/shm
 mkdir -p $tmpdir/proc
 mkdir -p $tmpdir/sys
 mkdir -p $tmpdir/lib
 mkdir -p $tmpdir/var
 mkdir -p $tmpdir/mnt
-cp `which busybox` $tmpdir/bin
+cp `which busybox.static` $tmpdir/bin/busybox
 $tmpdir/bin/busybox --install $tmpdir/bin
 
 cp $init $tmpdir/init

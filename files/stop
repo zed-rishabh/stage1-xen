@@ -1,4 +1,4 @@
 #!/bin/bash
 
-xl destroy $1 &>/dev/null
+xl destroy $(cat "/var/lib/rkt/pods/run/$1/pid") &>/dev/null
 exit 0

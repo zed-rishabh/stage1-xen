@@ -12,6 +12,7 @@ gw=""
 route=""
 pvcalls=0
 bridge="xenbr0"
+dhcp=1
 
 for i in $*
 do
@@ -53,29 +54,66 @@ outconfig=$workpath/out/test.0
 mountpoint=$stage2
 
 rm $outconfig &> /dev/null
-echo "kernel='$workpath/kernel'" >> $outconfig
-echo "ramdisk='$workpath/initrd'" >> $outconfig
-echo "memory = 1024" >> $outconfig
-echo "vcpus = 2" >> $outconfig
-echo "serial='pty'" >> $outconfig
-echo "boot='c'" >> $outconfig
-if test $pvcalls -eq 0
-then
-	if test $bridge = "vif"
-	then
-		echo "vif=['script=vif-nat,ip=$ip']" >> $outconfig
-	else
-		echo "vif=['bridge=$bridge']" >> $outconfig
-	fi
-	echo extra=\'console=hvc0 root=9p ip=$ip gw=$gw route=$route\' >> $outconfig 
+if [ -f "$workpath/kernel" ] ; then
+    echo "kernel='$workpath/kernel'" >> $outconfig
 else
-	echo "pvcalls=['']" >> $outconfig
-	echo extra=\'console=hvc0 root=9p pvcalls=1\' >> $outconfig 
+    echo "kernel='/hostfs/boot/kernel'" >> $outconfig
 fi
-echo "vfb=['vnc=1']" >> $outconfig
+echo "ramdisk='$workpath/initrd'" >> $outconfig
 echo "p9=[ 'tag=share_dir,security_model=none,path=$mountpoint' ]" >> $outconfig
-echo "name=\"$uuid\"" >> $outconfig
+
+if [ -f "$STAGE2_MNT_PTS" ] ; then
+  cp "$STAGE2_MNT_PTS" $stage2/mountPoints
+fi
+
+if [ -f "$STAGE1_SEED_XL_CFG" ] ; then
+    grep -Ev '^(bootloader|root|extra|kernel)' < "$STAGE1_SEED_XL_CFG" >> $outconfig
+    if test $dhcp -eq 0
+    then
+        echo extra=\'console=hvc0 root=9p\' >> $outconfig
+    else
+        cp $stage1/udhcpc_script.sh $stage2
+        echo extra=\'console=hvc0 root=9p dhcp=1\' >> $outconfig
+    fi
+else	
+    echo "memory = 1024" >> $outconfig
+    echo "vcpus = 2" >> $outconfig
+    echo "serial='pty'" >> $outconfig
+    echo "boot='c'" >> $outconfig
+    echo "vfb=['vnc=1']" >> $outconfig
+    echo "name=\"$uuid\"" >> $outconfig
+    if test $pvcalls -eq 0
+    then
+    	if test $bridge = "vif"
+    	then
+    		echo "vif=['script=vif-nat,ip=$ip']" >> $outconfig
+    	else
+    		echo "vif=['bridge=$bridge']" >> $outconfig
+    	fi
+    	echo extra=\'console=hvc0 root=9p ip=$ip gw=$gw route=$route\' >> $outconfig 
+    else
+    	echo "pvcalls=['']" >> $outconfig
+    	echo extra=\'console=hvc0 root=9p pvcalls=1\' >> $outconfig 
+    fi
+fi    
+
+cp $stage1/launcher.sh $stage2
+chmod +x $stage2/launcher.sh
+cp $stage1/mount_disk.sh $stage2
+chmod +x $stage2/mount_disk.sh
 echo $cmdline > $mountpoint/cmdline
-xl create $gargs $workpath/out/test.0
-domid=`xl list | grep "$uuid" | awk '{print$2}'`
+export IFS=$'\n'
+stage2manifest=$mountpoint/manifest
+stage2env=$mountpoint/environment
+for row in `cat $stage2manifest | jq -c .app.environment[]`; do
+  KEY=$(echo $row | jq -r .name)
+  VALUE=$(echo $row | jq -r .value)
+  echo export $KEY=\'$VALUE\' >> $stage2env
+done
+WORKDIR=`cat $stage2manifest | jq -r -c .app.workingDirectory`
+echo export WORKDIR=\'$WORKDIR\' >> $stage2env
+
+xl create $gargs $outconfig $STAGE1_XL_OPTS
+domname=$(sed -ne '/^name *=/s/^.*"\(.*\)"/\1/p' < "$outconfig")
+domid=`xl list | grep "$domname" | awk '{print$2}'`
 echo $domid > $pod/pid
