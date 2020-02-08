@@ -23,11 +23,14 @@ ls /sys/block/ | grep xvd | while read -r disk ; do
 
   #Creating a file system inside the partition
   fileSystem="vfat"
-  echo "Creating $fileSystem file system on /dev/$disk"
-  mkfs.$fileSystem /dev/$disk && \
-  echo "Successfully created $fileSystem file system on /dev/$disk" || \
-  echo "Failed to create $fileSystem file system on /dev/$disk"
-  echo
+  existingFileSystem="$(lsblk -nlf | grep $disk | awk '{print$2}')"
+  if [ "$existingFileSystem" == "" ]; then
+    echo "Creating $fileSystem file system on /dev/$disk"
+    mkfs.$fileSystem /dev/$disk && \
+    echo "Successfully created $fileSystem file system on /dev/$disk" || \
+    echo "Failed to create $fileSystem file system on /dev/$disk"
+    echo
+  fi
 
   #Mounting the partition onto a target directory
   diskAccess=$(cat /sys/block/$disk/ro)
